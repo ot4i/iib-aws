@@ -8,7 +8,7 @@ These are:
 #1 IBM Integration Bus
 This method will build an AMI with IBM Integration Bus v10.0.0.10 installed on top of Ubuntu 14.04 LTS and then start an instance of this AMI and create an Integration node called iibNodeA1 with an integration server name of default.
 
-First read the article at https://developer.ibm.com/integration/blog/2020/09/01/basic-deployment-ibm-integration-bus-amazon-web-services/
+First read the article at https://developer.ibm.com/integration/blog/2017/09/15/basic-deployment-ibm-integration-bus-amazon-web-services/
 
 Use the following files from the iib directory: iib-aws.json, install-iib.sh and iib-CF-Template.json
 
