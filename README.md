@@ -10,7 +10,7 @@ This method will build an AMI with IBM Integration Bus v10.0.0.10 installed on t
 
 First read the article at https://developer.ibm.com/integration/blog/2017/09/15/basic-deployment-ibm-integration-bus-amazon-web-services/
 
-Use the following files from the iib directory: iib-aws.json, install-iib.sh and iib-CF-Template.json
+Use the following files from the iib directory: iib-aws.json, iib-install.sh and iib-CF-Template.json
 
 
 #2 IBM Integration Bus and IBM MQ
