@@ -1,0 +1,22 @@
+{
+  "provisioners": [{
+    "type": "shell",
+    "script": "iib-mq-install.sh",
+    "execute_command": "chmod +x {{ .Path }}; {{ .Vars }} sudo -E {{ .Path }}",
+    "environment_vars": [
+      "MQ_URL=http://public.dhe.ibm.com/ibmdl/export/pub/software/websphere/messaging/mqadv/mqadv_dev90_linux_x86-64.tar.gz",
+      "MQ_PACKAGES=\"MQSeriesRuntime-*.rpm MQSeriesServer-*.rpm MQSeriesMsg*.rpm MQSeriesJava*.rpm MQSeriesJRE*.rpm MQSeriesGSKit*.rpm\"",
+      "IIB_VERSION=iib-10.0.0.10",
+      "IIB_URL=http://public.dhe.ibm.com/ibmdl/export/pub/software/websphere/integration/10.0.0.10-IIB-LINUX64-DEVELOPER.tar.gz"
+    ]
+  }],
+  "builders": [{
+    "type": "amazon-ebs",
+    "ami_name": "ibm-iib-mq-{{timestamp}}",
+    "instance_type": "t2.micro",
+    "region": "eu-west-1",
+    "source_ami": "ami-2944b450",
+    "ssh_username": "ubuntu",
+    "ami_description": "IBM MQ V9.0, IBM Integration Bus V10.0.0.10 on Ubuntu 14.04"
+  }]
+}
