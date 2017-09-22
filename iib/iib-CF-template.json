@@ -1,0 +1,174 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+  "Description" : "Run an IIB node",
+  "Parameters" : {
+    "KeyName": {
+      "Description" : "Name of an existing EC2 KeyPair to enable SSH access to the instances",
+      "Type": "AWS::EC2::KeyPair::KeyName",
+      "ConstraintDescription" : "must be the name of an existing EC2 KeyPair."
+    },
+    "AMI": {
+      "Description" : "ID of an AMI with IBM Integration Bus pre-installed",
+      "Type": "AWS::EC2::Image::Id",
+      "ConstraintDescription" : "must be a valid AMI ID."
+    },
+    "InstanceType" : {
+      "Description" : "IIB server EC2 instance type",
+      "Type" : "String",
+      "Default" : "t2.micro",
+      "AllowedValues" : [ "t1.micro", "t2.nano", "t2.micro", "t2.small", "t2.medium", "t2.large", "m1.small", "m1.medium", "m1.large", "m1.xlarge", "m2.xlarge", "m2.2xlarge", "m2.4xlarge", "m3.medium", "m3.large", "m3.xlarge", "m3.2xlarge", "m4.large", "m4.xlarge", "m4.2xlarge", "m4.4xlarge", "m4.10xlarge", "c1.medium", "c1.xlarge", "c3.large", "c3.xlarge", "c3.2xlarge", "c3.4xlarge", "c3.8xlarge", "c4.large", "c4.xlarge", "c4.2xlarge", "c4.4xlarge", "c4.8xlarge", "g2.2xlarge", "g2.8xlarge", "r3.large", "r3.xlarge", "r3.2xlarge", "r3.4xlarge", "r3.8xlarge", "i2.xlarge", "i2.2xlarge", "i2.4xlarge", "i2.8xlarge", "d2.xlarge", "d2.2xlarge", "d2.4xlarge", "d2.8xlarge", "hi1.4xlarge", "hs1.8xlarge", "cr1.8xlarge", "cc2.8xlarge", "cg1.4xlarge"],
+      "ConstraintDescription" : "must be a valid EC2 instance type."
+    },
+    "IIBNodeName" : {
+      "Description" : "Name to use for the IIB node",
+      "Type": "String",
+      "Default" : "iibNodeA1",
+      "ConstraintDescription" : "must be a valid IIB node name."
+    },
+    "IIBIntegrationServerName" : {
+      "Description" : "Name to use for the IIB integration server",
+      "Type": "String",
+      "Default" : "default",
+      "ConstraintDescription" : "must be a valid IIB Integration Server name."
+    },
+    "IIBVersion" : {
+      "Description" : "Version of IIB being run in form V.x.x.x",
+      "Type": "String",
+      "Default" : "10.0.0.10",
+      "ConstraintDescription" : "must be a valid Valid version and fixpack level of IBM Integration Bus."
+    }
+  },
+  "Resources" : {
+     "IIBInstance" : {
+       "Type" : "AWS::EC2::Instance",
+       "Properties" : {
+         "InstanceType"   : { "Ref" : "InstanceType" },
+         "KeyName"        : { "Ref" : "KeyName" },
+         "SecurityGroups" : [ { "Ref" : "IIBSecurityGroup" } ],
+         "ImageId"        : { "Ref" : "AMI" },
+         "UserData": {
+           "Fn::Base64": {
+             "Fn::Join": [
+               "",
+               [
+                "#cloud-config\n",
+                "write_files: \n",
+                " - content: |\n",
+                "     #!/bin/bash\n",
+                "     echo \"Starting the configuration of IBM Integration Bus at $(date)\"\n",
+                "     while [ $(lsblk|grep xvdg|wc -l) -lt 1 ]; do echo \"Waiting for xdvg to appear\"; sleep 1; done\n",
+                "     export VOLUME_DEV=/dev/xvdg\n",
+                "     export MOUNT_POINT=/var/mqsi\n",
+                "     mkdir -p ${MOUNT_POINT}\n",
+                "     mount ${VOLUME_DEV} ${MOUNT_POINT}\n",
+                "     if [[ $? != 0 ]]; then\n",
+                "       mkfs.ext4 ${VOLUME_DEV} 100000\n",
+                "       echo \"${VOLUME_DEV} ${MOUNT_POINT} ext4 defaults 0 2\" >> /etc/fstab\n",
+                "       mount ${MOUNT_POINT}\n",
+                "     fi\n",
+                "     export IIB_NODE_NAME=", { "Ref" : "IIBNodeName" }, "\n",
+                "     export IIB_INTEGRATION_SERVER_NAME=", { "Ref" : "IIBIntegrationServerName" }, "\n",
+                "     export IIB_VERSION=", { "Ref" : "IIBVersion" }, "\n",
+                "     export IIB_INSTALL_DIR=/opt/ibm/iib-${IIB_VERSION}\n",
+                "     # Accept the license - this will also create group a for mqbrkrs and allocate files in /var/mqsi \n",
+                "     ${IIB_INSTALL_DIR}/iib make registry global accept license silently\n",
+                "     # Recommended: Create the iib user ID with a fixed UID and group, so that the\n",
+                "     # file permissions work between different images\n",
+                "     useradd --uid 2345 --gid mqbrkrs --home-dir /var/mqsi iib\n",
+                "     usermod -G mqbrkrs root\n",
+                "     # Configure file limits for the iib user\n",
+                "     echo \"iib       hard  nofile     10240\" >> /etc/security/limits.conf\n",
+                "     echo \"iib       soft  nofile     10240\" >> /etc/security/limits.conf\n",
+                "     echo \". ${IIB_INSTALL_DIR}/server/bin/mqsiprofile\" >> ~iib/.bash_profile\n",
+                "     chown iib.mqbrkrs ~iib/.bash_profile\n",
+                "     sudo su - iib -c \"mqsicreatebroker ${IIB_NODE_NAME}\"\n",
+                "     sudo su - iib -c \"mqsichangebroker ${IIB_NODE_NAME} -f all\"\n",
+                "     sudo su - iib -c \"mqsistart ${IIB_NODE_NAME}\"\n",
+                "     sudo su - iib -c \"mqsicreateexecutiongroup ${IIB_NODE_NAME} -e ${IIB_INTEGRATION_SERVER_NAME}\"\n",
+                "     echo \"Integration Node is ${IIB_NODE_NAME}\"\n",
+                "     export IIB_NODE_CONF=/etc/init/mqsistart-${IIB_NODE_NAME}.conf\n",
+                "     cp /tmp/iib-upstart-mqsistart.conf ${IIB_NODE_CONF}\n",
+                "     sed -i \"s/%NODE%/${IIB_NODE_NAME}/\" ${IIB_NODE_CONF}\n",
+                "     export IIB_NODE_CONF=/etc/init/mqsistop-${IIB_NODE_NAME}.conf\n",
+                "     cp /tmp/iib-upstart-mqsistop.conf ${IIB_NODE_CONF}\n",
+                "     sed -i \"s/%NODE%/${IIB_NODE_NAME}/\" ${IIB_NODE_CONF}\n",
+                "     initctl reload-configuration\n",
+                "     initctl start mqsistart-${IIB_NODE_NAME}\n",
+                "     echo \"Ending the configuration of IBM Integration Bus at $(date)\"\n",
+                "   owner: root:root\n",
+                "   path: /tmp/configure_iib.sh\n",
+                "   permissions: '0700'\n",
+                " - content: |\n\n",
+                "     description \"Start IBM Integration Bus node %NODE%\"\n\n",
+                "     start on runlevel [2345]\n\n",
+                "     task\n\n",
+                "     console log\n\n",
+                "     exec su - iib bash -c 'mqsistart %NODE%'\n\n",
+                "   owner: root:root\n",
+                "   path: /tmp/iib-upstart-mqsistart.conf\n",
+                "   permissions: '0600'\n",
+                " - content: |\n\n",
+                "     description \"Stop IBM Integration Bus node %NODE%\"\n\n",
+                "     start on runlevel [2345]\n\n",
+                "     task\n\n",
+                "     console log\n\n",
+                "     exec su - iib bash -c 'mqsistop %NODE%'\n\n",
+                "   owner: root:root\n",
+                "   path: /tmp/iib-upstart-mqsistop.conf\n",
+                "   permissions: '0600'\n",
+                "runcmd: \n",
+                " - [ /tmp/configure_iib.sh ] \n"
+               ]
+             ]
+           }
+         }
+       }
+     },
+     "IIBSecurityGroup" : {
+       "Type" : "AWS::EC2::SecurityGroup",
+       "Properties" : {
+       "GroupDescription" : "Enable SSH (22) and IIB (4414, 7800)",
+       "SecurityGroupIngress" : [ {
+         "IpProtocol" : "tcp",
+         "FromPort" : "22",
+         "ToPort" : "22",
+         "CidrIp" : "0.0.0.0/0"
+       }, {
+         "IpProtocol" : "tcp",
+         "FromPort" : "4414",
+         "ToPort" : "4414",
+         "CidrIp" : "0.0.0.0/0"
+       }, {
+         "IpProtocol" : "tcp",
+         "FromPort" : "7800",
+         "ToPort" : "7800",
+         "CidrIp" : "0.0.0.0/0"
+       } ]
+       }
+     },
+     "IIBVolume" : {
+       "Type" : "AWS::EC2::Volume",
+       "Properties" : {
+         "Size" : "1",
+         "AvailabilityZone" : { "Fn::GetAtt" : [ "IIBInstance", "AvailabilityZone" ]},
+         "Tags": [
+           { "Key" : "Name", "Value" : "IIB" }
+         ]
+       }
+     },
+     "IIBMountPoint" : {
+       "Type" : "AWS::EC2::VolumeAttachment",
+       "Properties" : {
+         "InstanceId" : { "Ref" : "IIBInstance" },
+         "VolumeId"  : { "Ref" : "IIBVolume" },
+         "Device" : "/dev/xvdg"
+       }
+     }
+  },
+  "Outputs" : {
+    "InstanceID" : {
+      "Description": "The public IP of the IIB server",
+      "Value" : { "Fn::GetAtt" : [ "IIBInstance", "PublicIp" ]}
+    }
+  }
+}
